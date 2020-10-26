@@ -41,6 +41,8 @@
 #include <urdf_geometry_parser/urdf_geometry_parser.h>
 #include <std_msgs/Int16.h>
 
+#include <iostream>
+
 namespace freight_lite {
 
   FreightLiteController::FreightLiteController()
@@ -57,9 +59,10 @@ namespace freight_lite {
   {
   }
 
-  bool FreightLiteController::init(hardware_interface::RobotHW *robot_hw,
+  // bool FreightLiteController::init(hardware_interface::RobotHW *robot_hw,
+  bool FreightLiteController::init(FreightLite *robot_hw,
                                          ros::NodeHandle& root_nh,
-                                         ros::NodeHandle &controller_nh)
+                                         ros::NodeHandle& controller_nh)
   {
     const std::string complete_ns = controller_nh.getNamespace();
     std::size_t id = complete_ns.find_last_of("/");
@@ -68,8 +71,8 @@ namespace freight_lite {
 
     // Get joint names from the parameter server
     std::vector<std::string> front_wheel_names, rear_wheel_names;
-    if (!getWheelNames(controller_nh, "front_wheel", front_wheel_names) ||
-        !getWheelNames(controller_nh, "rear_wheel", rear_wheel_names))
+    if (!getWheelNames(controller_nh, "/freight_lite_controller/front_wheel", front_wheel_names) ||
+        !getWheelNames(controller_nh, "/freight_lite_controller/rear_wheel", rear_wheel_names))
     {
       return false;
     }
@@ -95,8 +98,8 @@ namespace freight_lite {
 
     // Get steering joint names from the parameter server
     std::vector<std::string> front_steering_names, rear_steering_names;
-    if (!getWheelNames(controller_nh, "front_steering", front_steering_names) ||
-        !getWheelNames(controller_nh, "rear_steering", rear_steering_names))
+    if (!getWheelNames(controller_nh, "/freight_lite_controller/front_steering", front_steering_names) ||
+        !getWheelNames(controller_nh, "/freight_lite_controller/rear_steering", rear_steering_names))
     {
       return false;
     }
@@ -133,6 +136,7 @@ namespace freight_lite {
     controller_nh.param("velocity_rolling_window_size", velocity_rolling_window_size, velocity_rolling_window_size);
     ROS_INFO_STREAM_NAMED(name_, "Velocity rolling window size of "
                           << velocity_rolling_window_size << ".");
+std::cout << "something" << "\n";
 
     odometry_.setVelocityRollingWindowSize(velocity_rolling_window_size);
 
@@ -203,8 +207,10 @@ namespace freight_lite {
     setOdomPubFields(root_nh, controller_nh);
 
 
-    hardware_interface::VelocityJointInterface *const vel_joint_hw = robot_hw->get<hardware_interface::VelocityJointInterface>();
-    hardware_interface::PositionJointInterface *const pos_joint_hw = robot_hw->get<hardware_interface::PositionJointInterface>();
+    hardware_interface::VelocityJointInterface *const vel_joint_hw = robot_hw_->get<hardware_interface::VelocityJointInterface>();
+    hardware_interface::PositionJointInterface *const pos_joint_hw = robot_hw_->get<hardware_interface::PositionJointInterface>();
+    // hardware_interface::VelocityJointInterface *const vel_joint_hw = robot_hw.get<hardware_interface::VelocityJointInterface>();
+    // hardware_interface::PositionJointInterface *const pos_joint_hw = robot_hw.get<hardware_interface::PositionJointInterface>();
 
     // Get the joint object to use in the realtime loop
     for (size_t i = 0; i < front_wheel_joints_.size(); ++i)
@@ -226,10 +232,17 @@ namespace freight_lite {
       rear_steering_joints_[i] = pos_joint_hw->getHandle(rear_steering_names[i]);  // throws on failure
     }
 
-    sub_command_ = controller_nh.subscribe("cmd_vel", 1, &FreightLiteController::cmdVelCallback, this);
-    sub_command_freight_lite_ = controller_nh.subscribe("cmd_freight_lite", 1, &FreightLiteController::cmdFreightLiteCallback, this);
-    sub_adjust_wheel_ = controller_nh.subscribe("adjust_steering", 1, &FreightLiteController::adjustSteeringCallback, this);
+    sub_command_ = controller_nh.subscribe("/freight_lite_controller/cmd_vel", 1, &FreightLiteController::cmdVelCallback, this);
+    sub_command_freight_lite_ = controller_nh.subscribe("/freight_lite_controller/cmd_freight_lite", 1, &FreightLiteController::cmdFreightLiteCallback, this);
+    sub_adjust_wheel_ = controller_nh.subscribe("/freight_lite_controller/adjust_steering", 1, &FreightLiteController::adjustSteeringCallback, this);
 
+    return true;
+  }
+
+  bool FreightLiteController::isRunning()
+  {
+    // Hack after removing pluggin library
+    // ROS_INFO_STREAM_NAMED(name_, "Controller isRunning ");
     return true;
   }
 
@@ -256,6 +269,7 @@ namespace freight_lite {
 
   void FreightLiteController::updateOdometry(const ros::Time& time)
   {
+    ROS_INFO_STREAM_NAMED(name_,"FreightLiteController::updateOdometry");
     // COMPUTE AND PUBLISH ODOMETRY
     const double fl_speed = front_wheel_joints_[0].getVelocity();
     const double fr_speed = front_wheel_joints_[1].getVelocity();
@@ -286,6 +300,7 @@ namespace freight_lite {
     }
 
     ROS_DEBUG_STREAM_THROTTLE(1, "rl_steering "<<rl_steering<<" rr_steering "<<rr_steering<<" rear_steering_pos "<<rear_steering_pos);
+    ROS_INFO_STREAM_NAMED(name_, "rl_steering "<<rl_steering<<" rr_steering "<<rr_steering<<" rear_steering_pos "<<rear_steering_pos);
     // Estimate linear and angular velocity using joint information
     odometry_.update(fl_speed, fr_speed, rl_speed, rr_speed,
                      front_steering_pos, rear_steering_pos, time);
@@ -332,6 +347,7 @@ namespace freight_lite {
         odom_frame.transform.translation.y = odometry_.getY();
         odom_frame.transform.rotation = orientation;
         tf_odom_pub_->unlockAndPublish();
+        ROS_INFO_STREAM_NAMED(name_,"Publish tf odom frame");
       }
     }
   }
@@ -343,13 +359,16 @@ namespace freight_lite {
     CommandTwist curr_cmd_twist = *(command_twist_.readFromRT());
     Command4ws curr_cmd_4ws = *(command_freight_lite_.readFromRT());
 
+    ROS_INFO_STREAM_NAMED(name_,"FreightLiteController::updateCommand");
     if(curr_cmd_4ws.stamp >= curr_cmd_twist.stamp)
     {
       cmd = &curr_cmd_4ws;
       enable_twist_cmd_ = false;
+      ROS_INFO_STREAM_NAMED(name_,"curr_cmd_4ws");
     }
     else
     {
+      ROS_INFO_STREAM_NAMED(name_,"curr_cmd_twist");
       cmd = &curr_cmd_twist;
       enable_twist_cmd_ = true;
     }
@@ -364,7 +383,7 @@ namespace freight_lite {
       curr_cmd_4ws.lin = 0.0;
       curr_cmd_4ws.front_steering = 0.0;
       curr_cmd_4ws.rear_steering = 0.0;
-      ROS_INFO_STREAM("BRAKE: cmd_vel timeout ");
+      ROS_INFO_STREAM_NAMED(name_,"BRAKE: cmd_vel timeout ");
     }
 
     const double cmd_dt(period.toSec());
@@ -372,7 +391,7 @@ namespace freight_lite {
     const double angular_speed = odometry_.getAngular();
     const double steering_track = track_-2*wheel_steering_y_offset_;
 
-    ROS_DEBUG_STREAM("angular_speed "<<angular_speed<< " wheel_radius_ "<<wheel_radius_);
+    ROS_INFO_STREAM_NAMED(name_,"angular_speed "<<angular_speed<< " wheel_radius_ "<<wheel_radius_);
     double vel_left_front = 0, vel_right_front = 0;
     double vel_left_rear = 0, vel_right_rear = 0;
     double front_left_steering = 0, front_right_steering = 0;
@@ -487,6 +506,7 @@ namespace freight_lite {
     }
 
     ROS_DEBUG_STREAM_THROTTLE(1, "vel_left_rear "<<vel_left_rear<<" front_right_steering "<<front_right_steering);
+    ROS_INFO_STREAM_NAMED(name_, "vel_left_rear "<<vel_left_rear<<" front_right_steering "<<front_right_steering);
     // Set wheels velocities:
     if(front_wheel_joints_.size() == 2 && rear_wheel_joints_.size() == 2)
     {
@@ -525,6 +545,7 @@ namespace freight_lite {
 
   void FreightLiteController::cmdVelCallback(const geometry_msgs::Twist& command)
   {
+    ROS_INFO_STREAM_NAMED(name_, "cmdVelCallbck");
     if (isRunning())
     {
       if(std::isnan(command.angular.z) || std::isnan(command.linear.x))
@@ -537,7 +558,8 @@ namespace freight_lite {
       command_struct_twist_.lin_y   = command.linear.y;
       command_struct_twist_.stamp = ros::Time::now();
       command_twist_.writeFromNonRT (command_struct_twist_);
-      ROS_DEBUG_STREAM_NAMED(name_,
+      // ROS_DEBUG_STREAM_NAMED(name_,
+      ROS_INFO_STREAM_NAMED(name_,
                              "Added values to command. "
                              << "Ang: "   << command_struct_twist_.ang << ", "
                              << "Lin x: " << command_struct_twist_.lin_x << ", "
@@ -552,6 +574,7 @@ namespace freight_lite {
 
   void FreightLiteController::cmdFreightLiteCallback(const four_wheel_steering_msgs::FourWheelSteering& command)
   {
+    ROS_INFO_STREAM_NAMED(name_, "FourWheelSteering");
     if (isRunning())
     {
       if(std::isnan(command.front_steering_angle) || std::isnan(command.rear_steering_angle)
@@ -581,6 +604,7 @@ namespace freight_lite {
 
   void FreightLiteController::adjustSteeringCallback(const std_msgs::Int16& wheel_mode)
   {
+    ROS_INFO_STREAM_NAMED(name_, "adjustSteering");
     if (isRunning())
     {
       int wheel = abs(wheel_mode.data);
@@ -606,6 +630,7 @@ namespace freight_lite {
         drive_mode_ = MODE_NONE;
       }
       robot_hw_->steering_servo_.adjustSteeringCallback(wheel_mode);
+      // robot_hw.steering_servo_.adjustSteeringCallback(wheel_mode);
     }
   }
 
@@ -645,7 +670,7 @@ namespace freight_lite {
         for (int i = 0; i < wheel_list.size(); ++i)
         {
           wheel_names[i] = static_cast<std::string>(wheel_list[i]);
-          //ROS_INFO_STREAM("wheel name "<<i<<" " << wheel_names[i]);
+          //ROS_INFO_STREAM_NAMED(name_,"wheel name "<<i<<" " << wheel_names[i]);
         }
       }
       else if (wheel_list.getType() == XmlRpc::XmlRpcValue::TypeString)
@@ -666,14 +691,14 @@ namespace freight_lite {
   {
     // Get and check params for covariances
     XmlRpc::XmlRpcValue pose_cov_list;
-    controller_nh.getParam("pose_covariance_diagonal", pose_cov_list);
+    controller_nh.getParam("/freight_lite_controller/pose_covariance_diagonal", pose_cov_list);
     ROS_ASSERT(pose_cov_list.getType() == XmlRpc::XmlRpcValue::TypeArray);
     ROS_ASSERT(pose_cov_list.size() == 6);
     for (int i = 0; i < pose_cov_list.size(); ++i)
       ROS_ASSERT(pose_cov_list[i].getType() == XmlRpc::XmlRpcValue::TypeDouble);
 
     XmlRpc::XmlRpcValue twist_cov_list;
-    controller_nh.getParam("twist_covariance_diagonal", twist_cov_list);
+    controller_nh.getParam("/freight_lite_controller/twist_covariance_diagonal", twist_cov_list);
     ROS_ASSERT(twist_cov_list.getType() == XmlRpc::XmlRpcValue::TypeArray);
     ROS_ASSERT(twist_cov_list.size() == 6);
     for (int i = 0; i < twist_cov_list.size(); ++i)

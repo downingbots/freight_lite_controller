@@ -122,7 +122,7 @@ int micro_maestro::convertRadiansToPosition(int servo, double rad)
   int pos;
   double deg, mydeg, deg45;
 
-  deg = rad * 180 / PI;
+  deg = int(rad * 180 / PI);
   mydeg = std::abs(deg);
   if (mydeg > 90)
       mydeg = (180 - mydeg);

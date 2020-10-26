@@ -34,12 +34,8 @@
 
 #include <freight_lite/odometry.h>
 
-#include <boost/bind.hpp>
-
 namespace freight_lite
 {
-  namespace bacc = boost::accumulators;
-
   Odometry::Odometry(size_t velocity_rolling_window_size)
   : last_update_timestamp_(0.0)
   , x_(0.0)
@@ -54,12 +50,13 @@ namespace freight_lite
   , wheel_radius_(0.0)
   , wheel_base_(0.0)
   , wheel_old_pos_(0.0)
-  , velocity_rolling_window_size_(velocity_rolling_window_size)
-  , linear_accel_acc_(RollingWindow::window_size = velocity_rolling_window_size)
-  , linear_jerk_acc_(RollingWindow::window_size = velocity_rolling_window_size)
-  , front_steer_vel_acc_(RollingWindow::window_size = velocity_rolling_window_size)
-  , rear_steer_vel_acc_(RollingWindow::window_size = velocity_rolling_window_size)
   {
+    // RollingMeanAcc_t linear_accel_acc_ = RollingMeanAcc<size_t>(velocity_rolling_window_size);
+    // RollingMeanAcc_t linear_jerk_acc_ = RollingMeanAcc<size_t>(velocity_rolling_window_size);
+    // RollingMeanAcc_t front_steer_vel_acc_ = RollingMeanAcc<size_t>(velocity_rolling_window_size);
+    // RollingMeanAcc_t rear_steer_vel_acc_t = RollingMeanAcc<size_t>(velocity_rolling_window_size);
+    // front_steer_vel_acc_ = front_steer_vel_acc_t(velocity_rolling_window_size);
+    // static RollingMeanAcc_t rear_steer_vel_acc_t(velocity_rolling_window_size);
   }
 
   void Odometry::init(const ros::Time& time)
@@ -109,13 +106,13 @@ namespace freight_lite
     /// Integrate odometry:
     integrateXY(linear_x_*dt, linear_y_*dt, angular_*dt);
 
-    linear_accel_acc_((linear_vel_prev_ - linear_)/dt);
+    linear_accel_acc_.add((linear_vel_prev_ - linear_)/dt);
     linear_vel_prev_ = linear_;
-    linear_jerk_acc_((linear_accel_prev_ - bacc::rolling_mean(linear_accel_acc_))/dt);
-    linear_accel_prev_ = bacc::rolling_mean(linear_accel_acc_);
-    front_steer_vel_acc_((front_steer_vel_prev_ - front_steering)/dt);
+    linear_jerk_acc_.add((linear_accel_prev_ - linear_accel_acc_.rolling_mean())/dt);
+    linear_accel_prev_ = linear_accel_acc_.rolling_mean();
+    front_steer_vel_acc_.add((front_steer_vel_prev_ - front_steering)/dt);
     front_steer_vel_prev_ = front_steering;
-    rear_steer_vel_acc_((rear_steer_vel_prev_ - rear_steering)/dt);
+    rear_steer_vel_acc_.add((rear_steer_vel_prev_ - rear_steering)/dt);
     rear_steer_vel_prev_ = rear_steering;
     return true;
   }
@@ -172,10 +169,10 @@ namespace freight_lite
 
   void Odometry::resetAccumulators()
   {
-    linear_accel_acc_ = RollingMeanAcc(RollingWindow::window_size = velocity_rolling_window_size_);
-    linear_jerk_acc_ = RollingMeanAcc(RollingWindow::window_size = velocity_rolling_window_size_);
-    front_steer_vel_acc_ = RollingMeanAcc(RollingWindow::window_size = velocity_rolling_window_size_);
-    rear_steer_vel_acc_ = RollingMeanAcc(RollingWindow::window_size = velocity_rolling_window_size_);
+    linear_accel_acc_.reset();
+    linear_jerk_acc_.reset();
+    front_steer_vel_acc_.reset();
+    rear_steer_vel_acc_.reset();
   }
 
 } // namespace freight_lite

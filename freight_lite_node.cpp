@@ -2,6 +2,7 @@
 
 // #include <freight_lite/freight_lite.h>
 #include <freight_lite/freight_lite.h>
+#include <freight_lite/freight_lite_controller.h>
 #include <chrono>
 #include <controller_manager/controller_manager.h>
 #include <ros/ros.h>
@@ -11,13 +12,35 @@ int main(int argc, char **argv)
 {
   ros::init(argc, argv, "freight_lite");
   ros::NodeHandle nh;
+  // ros::NodeHandle controller_nh;
 
   // This should be set in launch files as well
-  nh.setParam("/use_sim_time", true);
+  // nh.setParam("/use_sim_time", true);
 
   FreightLite robot;
   ROS_WARN_STREAM("period: " << robot.getPeriod().toSec());
-  controller_manager::ControllerManager cm(&robot, nh);
+
+  // ARD: The following didn't work with the new robot_control interface.
+  // Error: "Controller Spawner couldn't find the expected controller_manager 
+  //        ROS interface."
+  // controller_manager::ControllerManager cm(&robot, nh);
+
+  freight_lite::FreightLiteController freight_lite_controller_;
+  freight_lite_controller_.init(&robot, nh, nh);
+  // freight_lite_controller_.init(&robot, nh, controller_nh);
+/*
+  void FreightLiteController::update(const ros::Time& time, const ros::Duration& period)
+  void FreightLiteController::starting(const ros::Time& time)
+  void FreightLiteController::stopping(const ros::Time& )
+  void FreightLiteController::updateOdometry(const ros::Time& time)
+  void FreightLiteController::updateCommand(const ros::Time& time, const ros::Duration& period)
+  void FreightLiteController::brake()
+  void FreightLiteController::cmdVelCallback(const geometry_msgs::Twist& command)
+  void FreightLiteController::cmdFreightLiteCallback(const four_wheel_steering_msgs::FourWheelSteering& command)
+  void FreightLiteController::adjustSteeringCallback(const std_msgs::Int16& wheel_mode)
+  void FreightLiteController::setOdomPubFields(ros::NodeHandle& root_nh, ros::NodeHandle& controller_nh)
+*/
+
 
   ros::Publisher clock_publisher = nh.advertise<rosgraph_msgs::Clock>("/clock", 1);
 
@@ -36,7 +59,9 @@ int main(int argc, char **argv)
     begin = std::chrono::system_clock::now();
 
     robot.read();
-    cm.update(internal_time, dt);
+    // ARD: bypassing cm
+    // cm.update(internal_time, dt);
+    freight_lite_controller_.update(internal_time, dt);
     robot.write();
 
     end = std::chrono::system_clock::now();
