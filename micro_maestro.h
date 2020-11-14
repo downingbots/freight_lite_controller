@@ -12,6 +12,7 @@ namespace freight_lite {
     double convertPositionToRadians(int servo, int position);
     bool servoDeviceMatchesVendorProduct(libusb_device *device, unsigned short idVendor, unsigned short idProduct);
     int servoGetPosition(int servo);
+    void servoSetPWM(int servo, int pwm);
     void servoSetTarget(int servo, double rads);
     void servoSetAllTargets(double rad0, double rad1, double rad2, double rad3);
     void initDriveMode(int driveMode, bool do_sleep);

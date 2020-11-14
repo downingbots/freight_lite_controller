@@ -35,7 +35,7 @@
 
 #include <controller_interface/multi_interface_controller.h>
 #include <hardware_interface/joint_command_interface.h>
-#include <pluginlib/class_list_macros.hpp>
+// #include <pluginlib/class_list_macros.hpp>
 
 #include <nav_msgs/Odometry.h>
 #include <four_wheel_steering_msgs/FourWheelSteeringStamped.h>
@@ -71,9 +71,10 @@ namespace freight_lite {
      * \param root_nh       Node handle at root namespace
      * \param controller_nh Node handle inside the controller namespace
      */
-    bool init(hardware_interface::RobotHW* robot_hw,
+    // bool init(hardware_interface::RobotHW* robot_hw,
+    bool init(FreightLite *robot_hw,
                ros::NodeHandle& root_nh,
-               ros::NodeHandle &controller_nh);
+               ros::NodeHandle& controller_nh);
 
     /**
      * \brief Updates controller, i.e. computes the odometry and sets the new velocity commands
@@ -136,6 +137,8 @@ namespace freight_lite {
     CommandTwist command_struct_twist_;
     ros::Subscriber sub_command_;
     ros::Subscriber sub_adjust_wheel_;
+    ros::Subscriber sub_gripper_pwm_;
+    ros::Subscriber sub_wrist_pwm_;
 
     /// Freight Lite command related:
     realtime_tools::RealtimeBuffer<Command4ws> command_freight_lite_;
@@ -173,6 +176,8 @@ namespace freight_lite {
     bool enable_twist_cmd_;
 
     int drive_mode_;
+    int gripper_servo_;
+    int wrist_servo_;
 
     /// Speed limiters:
     CommandTwist last1_cmd_;
@@ -181,6 +186,9 @@ namespace freight_lite {
     SpeedLimiter limiter_ang_;
 
   private:
+
+    /* hack after removing pluggable library and linking directly */
+    bool isRunning();
 
     /**
      * \brief Update and publish odometry
@@ -212,6 +220,9 @@ namespace freight_lite {
     void cmdFreightLiteCallback(const four_wheel_steering_msgs::FourWheelSteering &command);
 
     void adjustSteeringCallback(const std_msgs::Int16& wheel_mode);
+    void wristPWMCallback(const std_msgs::Int16& wrist_pwm_msg);
+    void gripperPWMCallback(const std_msgs::Int16& gripper_pwm_msg);
+
 
 
     /**
@@ -235,5 +246,5 @@ namespace freight_lite {
 
   };
 
-  PLUGINLIB_EXPORT_CLASS(freight_lite::FreightLiteController, controller_interface::ControllerBase);
+  // PLUGINLIB_EXPORT_CLASS(freight_lite::FreightLiteController, controller_interface::ControllerBase);
 } // namespace freight_lite

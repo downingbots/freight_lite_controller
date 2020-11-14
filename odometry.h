@@ -36,15 +36,10 @@
 #define ODOMETRY_H_
 
 #include <ros/time.h>
-#include <boost/accumulators/accumulators.hpp>
-#include <boost/accumulators/statistics/stats.hpp>
-#include <boost/accumulators/statistics/rolling_mean.hpp>
-#include <boost/function.hpp>
+#include <freight_lite/rolling_mean.h>
 
 namespace freight_lite
 {
-  namespace bacc = boost::accumulators;
-
   /**
    * \brief The Odometry class handles odometry readings
    * (2D pose and velocity with related timestamp)
@@ -52,9 +47,6 @@ namespace freight_lite
   class Odometry
   {
   public:
-
-    /// Integration function, used to integrate the odometry:
-    typedef boost::function<void(double, double)> IntegrationFunction;
 
     /**
      * \brief Constructor
@@ -154,7 +146,7 @@ namespace freight_lite
      */
     double getLinearAcceleration() const
     {
-      return bacc::rolling_mean(linear_accel_acc_);
+      return linear_accel_acc_.rolling_mean();
     }
 
     /**
@@ -163,7 +155,7 @@ namespace freight_lite
      */
     double getLinearJerk() const
     {
-      return bacc::rolling_mean(linear_jerk_acc_);
+      return linear_jerk_acc_.rolling_mean();
     }
 
     /**
@@ -172,7 +164,7 @@ namespace freight_lite
      */
     double getFrontSteerVel() const
     {
-      return bacc::rolling_mean(front_steer_vel_acc_);
+      return front_steer_vel_acc_.rolling_mean();
     }
 
     /**
@@ -181,7 +173,7 @@ namespace freight_lite
      */
     double getRearSteerVel() const
     {
-      return bacc::rolling_mean(rear_steer_vel_acc_);
+      return rear_steer_vel_acc_.rolling_mean();
     }
 
     /**
@@ -200,10 +192,6 @@ namespace freight_lite
     void setVelocityRollingWindowSize(size_t velocity_rolling_window_size);
 
   private:
-
-    /// Rolling mean accumulator and window:
-    typedef bacc::accumulator_set<double, bacc::stats<bacc::tag::rolling_mean> > RollingMeanAcc;
-    typedef bacc::tag::rolling_window RollingWindow;
 
     /**
      * \brief Integrates the velocities (linear on x and y and angular)
@@ -254,11 +242,11 @@ namespace freight_lite
     double wheel_old_pos_;
 
     /// Rolling mean accumulators for the linar and angular velocities:
-    size_t velocity_rolling_window_size_;
-    RollingMeanAcc linear_accel_acc_;
-    RollingMeanAcc linear_jerk_acc_;
-    RollingMeanAcc front_steer_vel_acc_;
-    RollingMeanAcc rear_steer_vel_acc_;
+    size_t velocity_rolling_window_size_ = 10;
+    RollingMeanAcc_t linear_accel_acc_ = RollingMeanAcc<size_t>(10);
+    RollingMeanAcc_t linear_jerk_acc_ = RollingMeanAcc<size_t>(10);
+    RollingMeanAcc_t front_steer_vel_acc_ = RollingMeanAcc<size_t>(10);
+    RollingMeanAcc_t rear_steer_vel_acc_ = RollingMeanAcc<size_t>(10);
     double linear_vel_prev_, linear_accel_prev_;
     double front_steer_vel_prev_, rear_steer_vel_prev_;
   };

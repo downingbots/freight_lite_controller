@@ -69,6 +69,8 @@ namespace freight_lite {
     name_ = complete_ns.substr(id + 1);
     robot_hw_ = (FreightLite*)robot_hw;
 
+    controller_nh.param("wrist_servo", wrist_servo_, 11);
+    controller_nh.param("gripper_servo", gripper_servo_, 8);
     // Get joint names from the parameter server
     std::vector<std::string> front_wheel_names, rear_wheel_names;
     if (!getWheelNames(controller_nh, "/freight_lite_controller/front_wheel", front_wheel_names) ||
@@ -235,6 +237,9 @@ std::cout << "something" << "\n";
     sub_command_ = controller_nh.subscribe("/freight_lite_controller/cmd_vel", 1, &FreightLiteController::cmdVelCallback, this);
     sub_command_freight_lite_ = controller_nh.subscribe("/freight_lite_controller/cmd_freight_lite", 1, &FreightLiteController::cmdFreightLiteCallback, this);
     sub_adjust_wheel_ = controller_nh.subscribe("/freight_lite_controller/adjust_steering", 1, &FreightLiteController::adjustSteeringCallback, this);
+    sub_gripper_pwm_ = controller_nh.subscribe("/freight_lite_controller/gripper_pwm", 1, &FreightLiteController::gripperPWMCallback, this);
+    sub_wrist_pwm_ = controller_nh.subscribe("/freight_lite_controller/wrist_pwm", 1, &FreightLiteController::wristPWMCallback, this);
+
 
     return true;
   }
@@ -407,19 +412,19 @@ std::cout << "something" << "\n";
       last0_cmd_ = curr_cmd_twist;
 
       // Compute wheels velocities:
-      if(fabs(curr_cmd_twist.lin_x) > 0.001)
+      if(fabs(curr_cmd_twist.lin_y) > 0.001)
       {
         double vel_steering_offset = (curr_cmd_twist.ang*wheel_steering_y_offset_)/wheel_radius_;
-        vel_left_front  = copysign(1.0, curr_cmd_twist.lin_x) * sqrt((pow(curr_cmd_twist.lin_x - curr_cmd_twist.ang*steering_track/2,2)
+        vel_left_front  = copysign(1.0, curr_cmd_twist.lin_y) * sqrt((pow(curr_cmd_twist.lin_y - curr_cmd_twist.ang*steering_track/2,2)
                                                                            +pow(wheel_base_*curr_cmd_twist.ang/2.0,2)))/wheel_radius_
                                                         - vel_steering_offset;
-        vel_right_front = copysign(1.0, curr_cmd_twist.lin_x) * sqrt((pow(curr_cmd_twist.lin_x + curr_cmd_twist.ang*steering_track/2,2)
+        vel_right_front = copysign(1.0, curr_cmd_twist.lin_y) * sqrt((pow(curr_cmd_twist.lin_y + curr_cmd_twist.ang*steering_track/2,2)
                                                                            +pow(wheel_base_*curr_cmd_twist.ang/2.0,2)))/wheel_radius_
                                                         + vel_steering_offset;
-        vel_left_rear = copysign(1.0, curr_cmd_twist.lin_x) * sqrt((pow(curr_cmd_twist.lin_x - curr_cmd_twist.ang*steering_track/2,2)
+        vel_left_rear = copysign(1.0, curr_cmd_twist.lin_y) * sqrt((pow(curr_cmd_twist.lin_y - curr_cmd_twist.ang*steering_track/2,2)
                                                                          +pow(wheel_base_*curr_cmd_twist.ang/2.0,2)))/wheel_radius_
                                                       - vel_steering_offset;
-        vel_right_rear = copysign(1.0, curr_cmd_twist.lin_x) * sqrt((pow(curr_cmd_twist.lin_x + curr_cmd_twist.ang*steering_track/2,2)
+        vel_right_rear = copysign(1.0, curr_cmd_twist.lin_y) * sqrt((pow(curr_cmd_twist.lin_y + curr_cmd_twist.ang*steering_track/2,2)
                                                                           +pow(wheel_base_*curr_cmd_twist.ang/2.0,2)))/wheel_radius_
                                                        + vel_steering_offset;
       }
@@ -493,13 +498,13 @@ std::cout << "something" << "\n";
         vel_left_front  = copysign(1.0, curr_cmd_4ws.lin) * sqrt((pow(curr_cmd_4ws.lin - angular_speed_cmd*steering_track/2,2)
                                                                            +pow(l_front*angular_speed_cmd,2)))/wheel_radius_
                                                       - vel_steering_offset;
-        vel_right_front = copysign(1.0, curr_cmd_4ws.lin) * sqrt((pow(curr_cmd_4ws.lin + angular_speed_cmd*steering_track/2,2)
+        vel_right_front = -1 * copysign(1.0, curr_cmd_4ws.lin) * sqrt((pow(curr_cmd_4ws.lin + angular_speed_cmd*steering_track/2,2)
                                                                            +pow(l_front*angular_speed_cmd,2)))/wheel_radius_
                                                       + vel_steering_offset;
         vel_left_rear = copysign(1.0, curr_cmd_4ws.lin) * sqrt((pow(curr_cmd_4ws.lin - angular_speed_cmd*steering_track/2,2)
                                                                          +pow(l_rear*angular_speed_cmd,2)))/wheel_radius_
                                                     - vel_steering_offset;
-        vel_right_rear = copysign(1.0, curr_cmd_4ws.lin) * sqrt((pow(curr_cmd_4ws.lin + angular_speed_cmd*steering_track/2,2)
+        vel_right_rear = -1 * copysign(1.0, curr_cmd_4ws.lin) * sqrt((pow(curr_cmd_4ws.lin + angular_speed_cmd*steering_track/2,2)
                                                                           +pow(l_rear*angular_speed_cmd,2)))/wheel_radius_
                                                      + vel_steering_offset;
       }
@@ -629,10 +634,32 @@ std::cout << "something" << "\n";
       {
         drive_mode_ = MODE_NONE;
       }
-      robot_hw_->steering_servo_.adjustSteeringCallback(wheel_mode);
+      robot_hw_->servos_.adjustSteeringCallback(wheel_mode);
       // robot_hw.steering_servo_.adjustSteeringCallback(wheel_mode);
     }
   }
+
+  void FreightLiteController::wristPWMCallback(const std_msgs::Int16& wrist_pwm_msg)
+  {
+    double pwm = 1.0 * wrist_pwm_msg.data;
+    int target;
+
+    // the wrist servo can go 180 degrees, so 496 is the min pwm
+    target = round(496.0 + (1.0 * pwm / 256.0 * (2000.0 - 496.0))); 
+    ROS_INFO_STREAM_NAMED(name_, "wrist target " << target << " wrist pwm " << pwm);
+    robot_hw_->servos_.servoSetPWM(wrist_servo_, target);
+  }
+
+  void FreightLiteController::gripperPWMCallback(const std_msgs::Int16& gripper_pwm_msg)
+  {
+    double pwm = 1.0 * gripper_pwm_msg.data;
+    int target;
+
+    target = round(992.5 + (1.0 * pwm / 256.0 * (2000.0 - 992.0))); 
+    ROS_INFO_STREAM_NAMED(name_, "gripper target " << target << " gripper pwm " << pwm);
+    robot_hw_->servos_.servoSetPWM(gripper_servo_, pwm);
+  }
+
 
   bool FreightLiteController::getWheelNames(ros::NodeHandle& controller_nh,
                               const std::string& wheel_param,
